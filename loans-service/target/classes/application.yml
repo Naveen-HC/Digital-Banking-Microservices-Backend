@@ -1,0 +1,26 @@
+server:
+  port: 8083
+spring:
+  application:
+    name: loans-service
+  datasource:
+    url: jdbc:mysql://localhost:3306/loansdb
+    username: root
+    password: root
+  h2:
+    console:
+      enabled: true
+  jpa:
+    database-platform: org.hibernate.dialect.MySQL8Dialect
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+  config:
+    import: optional:configserver:http://localhost:8888/
+  profiles:
+    active: qa
+  rabbitmq:
+    host: localhost
+    username: guest
+    password: guest
+    port: 5672

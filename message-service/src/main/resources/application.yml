@@ -1,0 +1,28 @@
+spring:
+  application:
+    name: message-service
+  cloud:
+    function:
+      definition: sms|email
+    stream:
+      binders:
+        kafka:
+          type: kafka
+      bindings:
+        smsemail-in-0:
+          destination: message-request
+          group: ${spring.application.name}
+          binder: kafka
+        smsemail-out-0:
+          destination: message-response
+          binder: kafka
+  rabbitmq:
+    host: rabbitmq-container
+    port: 5672
+    username: guest
+    password: guest
+  kafka:
+    bootstrap-servers: kafka-container:9092
+
+server:
+  port: 8084

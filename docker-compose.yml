@@ -1,0 +1,227 @@
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:21.1.1
+    container_name: keycloak-container
+    environment:
+      - KEYCLOAK_ADMIN=admin
+      - KEYCLOAK_ADMIN_PASSWORD=admin
+      - KC_DB=dev-mem
+      - KC_HTTP_ENABLED=true
+    command: start-dev
+    ports:
+      - "8085:8080"
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/health/ready" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - my-network
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq-container
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: [ "CMD", "rabbitmq-diagnostics", "status" ]
+      timeout: 10s
+      interval: 30s
+      retries: 5
+      start_period: 10s
+    networks:
+      - my-network
+
+  kafka:
+    image: docker.io/bitnami/kafka:4.0
+    container_name: kafka-container
+    ports:
+      - "9092:9092"
+    healthcheck:
+      test: [ "CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092" ]
+    volumes:
+      - "kafka_data:/bitnami"
+    environment:
+      # KRaft settings
+      - KAFKA_CFG_NODE_ID=0
+      - KAFKA_CFG_PROCESS_ROLES=controller,broker
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka:9093
+      # Listeners
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://:9092
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+    networks:
+      - my-network
+
+  config-server:
+    image: hcnaveen/config-server:v1
+    container_name: config-server-container
+    #    ports:
+    #      - "8080:8080"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/actuator/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    networks:
+      - my-network
+
+  discovery-server:
+    image: hcnaveen/discovery-server:v1
+    container_name: discovery-server-container
+    ports:
+      - "8761:8761"
+    environment:
+      - SPRING_CLOUD_CONFIG_URI=http://config-server-container:8080/
+      - SPRING_RABBITMQ_HOST=rabbitmq-container
+      - SPRING_RABBITMQ_PORT=5672
+      - SPRING_RABBITMQ_USERNAME=guest
+      - SPRING_RABBITMQ_PASSWORD=guest
+    depends_on:
+      config-server:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8761/actuator/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    networks:
+      - my-network
+
+  accounts-service:
+    image: hcnaveen/accounts-service:v1
+    container_name: accounts-service-container
+    #    ports:
+    #      - "8081:8081"
+    environment:
+      - SPRING_PROFILES_ACTIVE=qa
+      - SPRING_CLOUD_CONFIG_URI=http://config-server-container:8080/
+      - SPRING_RABBITMQ_HOST=rabbitmq-container
+      - SPRING_RABBITMQ_PORT=5672
+      - SPRING_RABBITMQ_USERNAME=guest
+      - SPRING_RABBITMQ_PASSWORD=guest
+      - SPRING_KAFKA_BOOTSTRAP-SERVERS=kafka-container:9092
+    depends_on:
+#      kafka:
+#        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8081/actuator/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    networks:
+      - my-network
+
+  cards-service:
+    image: hcnaveen/cards-service:v1
+    container_name: cards-service-container
+    #    ports:
+    #      - "8082:8082"
+    environment:
+      - SPRING_PROFILES_ACTIVE=qa
+      - SPRING_CLOUD_CONFIG_URI=http://config-server-container:8080/
+      - SPRING_RABBITMQ_HOST=rabbitmq-container
+      - SPRING_RABBITMQ_PORT=5672
+      - SPRING_RABBITMQ_USERNAME=guest
+      - SPRING_RABBITMQ_PASSWORD=guest
+    depends_on:
+      discovery-server:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8082/actuator/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    networks:
+      - my-network
+
+  loans-service:
+    image: hcnaveen/loans-service:v1
+    container_name: loans-service-container
+    #    ports:
+    #      - "8083:8083"
+    environment:
+      - SPRING_PROFILES_ACTIVE=qa
+      - SPRING_CLOUD_CONFIG_URI=http://config-server-container:8080/
+      - SPRING_RABBITMQ_HOST=rabbitmq-container
+      - SPRING_RABBITMQ_PORT=5672
+      - SPRING_RABBITMQ_USERNAME=guest
+      - SPRING_RABBITMQ_PASSWORD=guest
+    depends_on:
+      discovery-server:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8083/actuator/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    networks:
+      - my-network
+
+  message-service:
+    image: hcnaveen/message-service:v1
+    container_name: message-service-container
+#    ports:
+#      - "8084:8084"
+    environment:
+      - SPRING_PROFILES_ACTIVE=qa
+      - SPRING_CLOUD_CONFIG_URI=http://config-server-container:8080/
+      - SPRING_RABBITMQ_HOST=rabbitmq-container
+      - SPRING_RABBITMQ_PORT=5672
+      - SPRING_RABBITMQ_USERNAME=guest
+      - SPRING_RABBITMQ_PASSWORD=guest
+      - SPRING_KAFKA_BOOTSTRAP-SERVERS=kafka-container:9092
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8084/actuator/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    networks:
+      - my-network
+
+  gateway-server:
+    image: hcnaveen/gateway-server:v1
+    container_name: gateway-server-container
+    ports:
+      - "8080:8080"
+    depends_on:
+#      keycloak:
+#        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      accounts-service:
+        condition: service_healthy
+      cards-service:
+        condition: service_healthy
+      loans-service:
+        condition: service_healthy
+    networks:
+      - my-network
+
+networks:
+  my-network:
+    driver: bridge
+
+volumes:
+  kafka_data:
+    driver: local
